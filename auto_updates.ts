@@ -10,11 +10,17 @@ const appInfos: any[] = [];
 async function fetchZipToBundle() {
   for (const info of appInfos) {
     if (!info) return;
-    const dwebAppBase = "https://raw.githubusercontent.com/BFChainMeta/awesome-bfmeta/main/src/dweb-apps"
-    const zipUrl = path.join(dwebAppBase, info.appName, info.version, info.zipFullName)
+    const dwebAppBase =
+      "https://raw.githubusercontent.com/BFChainMeta/awesome-bfmeta/main/src/dweb-apps";
+    const zipUrl = path.join(
+      dwebAppBase,
+      info.appName,
+      info.version,
+      info.zipFullName,
+    );
     const srcPath = info.appPath;
     await downloadOriginZip(zipUrl, srcPath, srcPath);
-    await buildBundle(info, srcPath + "/usr/www", info.bundlePath);
+    await buildBundle(info, path.join(srcPath, "usr/www"), info.bundlePath);
   }
 }
 
@@ -25,11 +31,12 @@ async function downloadOriginZip(
 ): Promise<void> {
   const { headers } = await axios.head(fileUrl);
   const totalLength = headers["content-length"];
-  const appName = srcPath.split("apps/")[1].split("-")[0];
-  // console.log(`Total size of the zip to download: ${totalLength} bytes.`);
-  console.log("\n-----------开始处理---" + appName + "-----------");
+  const normalizedSrcPath = path.normalize(srcPath);
+  const appPath = normalizedSrcPath.split(path.sep)[1];
+  const appName = appPath.split("-")[0]; // .filter(part => part.includes('apps') && part.includes('-'))[0].split('-')[0];
 
-  const writer = fs.createWriteStream(srcPath + "/file.zip");
+  console.log("\n-----------开始处理---" + appName + "-----------");
+  const writer = fs.createWriteStream(path.join(srcPath, "file.zip"));
   const response = await axios({
     url: fileUrl,
     method: "GET",
@@ -48,7 +55,7 @@ async function downloadOriginZip(
 
   return new Promise((resolve, reject) => {
     writer.on("finish", () => {
-      fs.createReadStream(srcPath + "/file.zip")
+      fs.createReadStream(path.join(srcPath, "file.zip"))
         .pipe(unzipper.Extract({ path: desPath }))
         .on("close", () => {
           console.log("\n解压成功.");
@@ -85,7 +92,7 @@ async function buildBundle(
       resolve(data);
     });
   });
-  
+
   await dataEvent;
 
   process.stderr.on("data", (data) => {
