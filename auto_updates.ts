@@ -72,7 +72,7 @@ async function buildBundle(
   outputPath: string,
 ) {
   const command = "plaoc";
-  const params = [
+  let params = [
     "bundle",
     resourcePath,
     "--id",
@@ -84,7 +84,13 @@ async function buildBundle(
   ];
   console.log("开始打包");
 
-  const process = spawn(command, params);
+  let process;
+  if (Deno.build.os === "windows") {
+    params = ["/c", command].concat(params);
+    process = spawn("cmd.exe", params);
+  } else {
+    process = spawn(command, params);
+  }
 
   const dataEvent = new Promise((resolve, reject) => {
     process.stdout.on("data", (data) => {
