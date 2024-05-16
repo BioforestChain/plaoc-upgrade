@@ -4,12 +4,13 @@ import unzipper from "npm:unzipper";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import process from "node:process";
-
+// import { isWindows } from "https://deno.land/std@0.178.0/os/mod.ts";
+"node:path"
 const appInfos: any[] = [];
 
 async function fetchZipToBundle() {
   for (const info of appInfos) {
-    if (!info) return;
+    if (!info) continue;
     const dwebAppBase =
       "https://raw.githubusercontent.com/BFChainMeta/awesome-bfmeta/main/src/dweb-apps";
     const zipUrl = path.join(
@@ -19,8 +20,12 @@ async function fetchZipToBundle() {
       info.zipFullName,
     );
     const srcPath = info.appPath;
-    await downloadOriginZip(zipUrl, srcPath, srcPath);
-    await buildBundle(info, path.join(srcPath, "usr/www"), info.bundlePath);
+    try {
+      await downloadOriginZip(zipUrl, srcPath, srcPath);
+      await buildBundle(info, path.join(srcPath, "usr/www"), info.bundlePath);
+    } catch (error) {
+      console.error(`Error in fetchZipToBundle: ${error}`);
+    }
   }
 }
 
@@ -66,58 +71,50 @@ async function downloadOriginZip(
   });
 }
 
-async function buildBundle(
-  info: any,
-  resourcePath: string,
-  outputPath: string,
-) {
-  const command = "plaoc";
-  let params = [
-    "bundle",
-    resourcePath,
-    "--id",
-    info.appId,
-    "--version",
-    info.version,
-    "--out",
-    outputPath,
-  ];
-  console.log("开始打包");
+async function buildBundle(info: any, resourcePath: string, outputPath: string) {
+    console.log("开始打包");
 
-  let process;
-  if (Deno.build.os === "windows") {
-    params = ["/c", command].concat(params);
-    process = spawn("cmd.exe", params);
-  } else {
-    process = spawn(command, params);
-  }
+    const command = "plaoc";
 
-  const dataEvent = new Promise((resolve, reject) => {
-    process.stdout.on("data", (data) => {
-      console.log(`stdout: ${data}`);
-      resolve(data);
+    let params = [
+        "bundle",
+        resourcePath,
+        "--id",
+        info.appId,
+        "--version",
+        info.version,
+        "--out",
+        outputPath
+    ];
+
+    const cmd = [command, ...params];
+    const cmdStr = cmd.join(' ');
+
+    let runCmd;
+
+    // Deno.build.os 会根据操作系统类型返回 ‘windows’ 'darwin' 或 'linux'
+    if (Deno.build.os === 'windows') {
+        runCmd = ['cmd.exe', '/c', cmdStr];
+    } else {
+        runCmd = cmd;
+    }
+
+    const p = Deno.run({
+        cmd: runCmd,
+        stdout: "piped",
+        stderr: "piped"
     });
-  });
 
-  await dataEvent;
+    const { code } = await p.status();
 
-  process.stderr.on("data", (data) => {
-    console.error(`stderr: ${data}`);
-  });
-
-  const closeEvent = new Promise((resolve, reject) => {
-    process.on("close", (code) => {
-      if (code != 0) {
-        console.log(`打包异常，退出码 ${code}`);
-        reject(new Error("打包异常"));
-      } else {
-        console.log(`${info.appName} 打包完成`);
-        resolve(null);
-      }
-    });
-  });
-
-  return await closeEvent;
+    if (code === 0) {
+        const rawOutput = await p.output();
+        await Deno.stdout.write(rawOutput);
+    } else {
+        const rawError = await p.stderrOutput();
+        const errorString = new TextDecoder().decode(rawError);
+        console.log(errorString);
+    }
 }
 
 async function fecthAppInfo(
@@ -159,7 +156,7 @@ async function fetchApplist() {
       "configLink": `${baseUrl}/${key}/${applist[key].latest}/metadata.json`,
     };
   });
-
+  console.log('获取最新app列表')
   return list;
 }
 
@@ -201,7 +198,10 @@ async function buildConfig() {
     const appInfo = await fecthAppInfo(app);
     appInfos.push(appInfo);
   }
+  console.log('已更新所有app信息')
 }
 
 await buildConfig();
 await fetchZipToBundle();
+
+
